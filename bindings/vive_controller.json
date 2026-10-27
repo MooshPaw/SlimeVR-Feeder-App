@@ -4,7 +4,16 @@
   "bindings": {
     "/actions/main": {
       "sources": [],
-      "skeleton": [],
+      "skeleton": [
+        {
+          "output": "/actions/main/in/skeletonlefthand",
+          "path": "/user/hand/left/input/skeleton/left"
+        },
+        {
+          "output": "/actions/main/in/skeletonrighthand",
+          "path": "/user/hand/right/input/skeleton/right"
+        }
+      ],
       "haptics": [],
       "poses": []
     }

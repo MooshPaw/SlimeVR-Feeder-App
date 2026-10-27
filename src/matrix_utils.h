@@ -16,4 +16,9 @@ vr::HmdQuaternion_t GetRotation(vr::HmdMatrix34_t matrix);
 //-----------------------------------------------------------------------------
 vr::HmdVector3_t GetPosition(vr::HmdMatrix34_t matrix);
 
+//-----------------------------------------------------------------------------
+// Purpose: Composes two rotations (a applied after b, i.e. a * b).
+//-----------------------------------------------------------------------------
+vr::HmdQuaternion_t MultiplyQuaternion(vr::HmdQuaternion_t a, vr::HmdQuaternion_t b);
+
 #endif // MATRIX_UTILS

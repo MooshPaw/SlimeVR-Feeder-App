@@ -74,6 +74,9 @@ message Position {
         FULL = 3;
     }
     optional DataSource data_source = 9;
+    optional float vx = 10;
+    optional float vy = 11;
+    optional float vz = 12;
 }
 
 message UserAction {
@@ -115,6 +118,40 @@ message Battery {
     bool is_charging = 3;
 }
 
+enum FingerBone {
+    THUMB_METACARPAL = 0;
+    THUMB_PROXIMAL = 1;
+    THUMB_DISTAL = 2;
+    INDEX_PROXIMAL = 3;
+    INDEX_INTERMEDIATE = 4;
+    INDEX_DISTAL = 5;
+    MIDDLE_PROXIMAL = 6;
+    MIDDLE_INTERMEDIATE = 7;
+    MIDDLE_DISTAL = 8;
+    RING_PROXIMAL = 9;
+    RING_INTERMEDIATE = 10;
+    RING_DISTAL = 11;
+    LITTLE_PROXIMAL = 12;
+    LITTLE_INTERMEDIATE = 13;
+    LITTLE_DISTAL = 14;
+}
+
+message FingerBoneRotation {
+    FingerBone bone = 1;
+    float qx = 2;
+    float qy = 3;
+    float qz = 4;
+    float qw = 5;
+}
+
+// Per-finger bone rotations for a hand, gathered from SteamVR skeletal input.
+// hand_tracker_id refers to the tracker_id of the hand controller this
+// skeleton belongs to, as already sent via TrackerAdded/Position for that hand.
+message HandSkeleton {
+    int32 hand_tracker_id = 1;
+    repeated FingerBoneRotation bones = 2;
+}
+
 message ProtobufMessage {
     oneof message {
         Position position = 1;
@@ -123,5 +160,6 @@ message ProtobufMessage {
         TrackerStatus tracker_status = 4;
         Battery battery = 5;
         Version version = 6;
+        HandSkeleton hand_skeleton = 7;
     }
 }

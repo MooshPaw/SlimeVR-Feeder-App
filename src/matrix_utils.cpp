@@ -26,3 +26,14 @@ HmdVector3_t GetPosition(HmdMatrix34_t matrix) {
 
 	return vector;
 }
+
+HmdQuaternion_t MultiplyQuaternion(HmdQuaternion_t a, HmdQuaternion_t b) {
+	vr::HmdQuaternion_t result;
+
+	result.w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z;
+	result.x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y;
+	result.y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x;
+	result.z = a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w;
+
+	return result;
+}

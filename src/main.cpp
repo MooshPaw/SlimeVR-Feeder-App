@@ -167,6 +167,33 @@ std::unordered_map<std::string, SlimeVRPosition> controller_type_to_position{
 	{"vive_tracker_right_foot", SlimeVRPosition::RightFoot},
 };
 
+// SteamVR hand skeletons always have 31 bones (root, wrist, thumb x4,
+// 4 fingers x5 each). See Valve's skeletal input documentation / the
+// SteamVR_Skeleton_JointIndexes layout.
+static constexpr uint32_t k_handSkeletonBoneCount = 31;
+
+// Maps our 15 FingerBone proto values (in enum declaration order) to the
+// corresponding SteamVR hand skeleton bone index. Metacarpals (except thumb's),
+// the root/wrist bones, and the aux/tip bones are intentionally skipped, since
+// the server's tracker model only has 15 "real" bones per hand.
+static constexpr int32_t fingerBoneToOpenVRIndex[15] = {
+	2,  // THUMB_METACARPAL
+	3,  // THUMB_PROXIMAL
+	4,  // THUMB_DISTAL
+	7,  // INDEX_PROXIMAL
+	8,  // INDEX_INTERMEDIATE
+	9,  // INDEX_DISTAL
+	12, // MIDDLE_PROXIMAL
+	13, // MIDDLE_INTERMEDIATE
+	14, // MIDDLE_DISTAL
+	17, // RING_PROXIMAL
+	18, // RING_INTERMEDIATE
+	19, // RING_DISTAL
+	22, // LITTLE_PROXIMAL
+	23, // LITTLE_INTERMEDIATE
+	24, // LITTLE_DISTAL
+};
+
 class Trackers {
 private:
 	TrackerInfo tracker_info[k_unMaxTrackedDeviceCount] = {};
@@ -175,6 +202,9 @@ private:
 	std::set<TrackedDeviceIndex_t> current_trackers = {};
 	//TrackedDeviceIndex_t current_trackers[k_unMaxTrackedDeviceCount];
 	//uint32_t current_trackers_size = 0;
+
+	VRActionHandle_t skeleton_left_action = k_ulInvalidActionHandle;
+	VRActionHandle_t skeleton_right_action = k_ulInvalidActionHandle;
 
 	SlimeVRBridge &bridge;
 public:
@@ -309,8 +339,14 @@ private:
 			);
 
 			bridge.sendMessage(message);
+
+			if (info->position == SlimeVRPosition::LeftHand) {
+				SendFingerData(index, skeleton_left_action, new_rotation);
+			} else if (info->position == SlimeVRPosition::RightHand) {
+				SendFingerData(index, skeleton_right_action, new_rotation);
+			}
 		}
-		
+
 		// send status update on change, or if we just connected.
 		if (!pose.bDeviceIsConnected) {
 			SetStatus(index, messages::TrackerStatus_Status_DISCONNECTED, just_connected);
@@ -522,6 +558,48 @@ public:
 		}
 	}
 
+	void SendFingerData(TrackedDeviceIndex_t index, VRActionHandle_t skeleton_action, HmdQuaternion_t hand_rotation) {
+		if (skeleton_action == k_ulInvalidActionHandle) {
+			return;
+		}
+
+		VRBoneTransform_t bone_transforms[k_handSkeletonBoneCount];
+		EVRInputError input_error = VRInput()->GetSkeletalBoneData(
+			skeleton_action,
+			VRSkeletalTransformSpace_Model,
+			VRSkeletalMotionRange_WithoutController,
+			bone_transforms,
+			k_handSkeletonBoneCount
+		);
+		if (input_error != EVRInputError::VRInputError_None) {
+			// not bound to anything providing skeletal data (e.g. no finger tracking
+			// on this controller) - this is an optional action, so fail quietly.
+			return;
+		}
+
+		messages::ProtobufMessage message;
+		messages::HandSkeleton *hand_skeleton = message.mutable_hand_skeleton();
+		hand_skeleton->set_hand_tracker_id(index);
+
+		for (int iii = 0; iii < 15; ++iii) {
+			auto &orientation = bone_transforms[fingerBoneToOpenVRIndex[iii]].orientation;
+			HmdQuaternion_t bone_rotation{ orientation.w, orientation.x, orientation.y, orientation.z };
+			// bone_rotation is relative to the wrist (model space); compose with the
+			// hand's own absolute rotation so the server receives a final, world-space
+			// bone rotation (matching how it treats other absolute-rotation finger trackers).
+			HmdQuaternion_t final_rotation = MultiplyQuaternion(hand_rotation, bone_rotation);
+
+			messages::FingerBoneRotation *bone = hand_skeleton->add_bones();
+			bone->set_bone((messages::FingerBone)iii);
+			bone->set_qw(final_rotation.w);
+			bone->set_qx(final_rotation.x);
+			bone->set_qy(final_rotation.y);
+			bone->set_qz(final_rotation.z);
+		}
+
+		bridge.sendMessage(message);
+	}
+
 	void HandleDigitalActionBool(VRActionHandle_t action_handle, const char *server_name) {
 		InputDigitalActionData_t action_data;
 		EVRInputError input_error = VRInput()->GetDigitalActionData(action_handle, &action_data, sizeof(InputDigitalActionData_t), 0);
@@ -567,6 +645,9 @@ std::optional<Trackers> Trackers::Create(SlimeVRBridge &bridge, ETrackingUnivers
 		0,
 		0
 	};
+
+	result.skeleton_left_action = GetAction("/actions/main/in/skeletonlefthand");
+	result.skeleton_right_action = GetAction("/actions/main/in/skeletonrighthand");
 
 	return result;
 }

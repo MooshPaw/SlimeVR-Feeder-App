@@ -365,3 +365,13 @@ FodyWeavers.xsd
 # Cmake (when using VS Code or other)
 build/
 .vscode/
+
+# JetBrains IDEs (CLion, etc.)
+.idea/
+
+# AI coding assistant folders
+.claude/
+.cursor/
+.windsurf/
+.continue/
+.aider*
