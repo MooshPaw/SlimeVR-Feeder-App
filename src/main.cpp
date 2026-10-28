@@ -379,6 +379,34 @@ private:
 		}
 	}
 
+	// When a device newly claims a position (e.g. a Quest hand-tracking-as-controller
+	// device taking over the LeftHand/RightHand role from a physical controller that
+	// just deactivated), immediately disconnect any other index still claiming that
+	// same position, instead of waiting for its own ~1s connection_timeout to expire.
+	// Without this, the server keeps resolving the body position to whichever tracker
+	// registered first - the now-stale one - until its timeout catches up, causing the
+	// position to visibly freeze for about a second on every switch.
+	void SupersedeOthersAtPosition(TrackedDeviceIndex_t index, SlimeVRPosition position) {
+		if (position == SlimeVRPosition::None) {
+			return;
+		}
+
+		for (TrackedDeviceIndex_t iii = 0; iii < k_unMaxTrackedDeviceCount; ++iii) {
+			if (iii == index) {
+				continue;
+			}
+
+			auto other = tracker_info + iii;
+			if (other->state == TrackerState::RUNNING && other->position == position) {
+				fmt::print("Index {} now claims position {} ({}), releasing stale index {}.\n", index, positionNames[(int)position], (int)position, iii);
+				other->state = TrackerState::DISCONNECTED;
+				other->connection_timeout = 0;
+				other->name = "";
+				SetStatus(iii, messages::TrackerStatus_Status_DISCONNECTED, true);
+			}
+		}
+	}
+
 	void SetPosition(TrackedDeviceIndex_t index, SlimeVRPosition position, bool send_anyway) {
 		if (index >= k_unMaxTrackedDeviceCount) {
 			fmt::print("SetPosition: Got invalid index {}!\n", index);
@@ -400,6 +428,7 @@ private:
 				} else {
 					should_send = true;
 					info->state = TrackerState::RUNNING;
+					SupersedeOthersAtPosition(index, position);
 				}
 				break;
 
@@ -411,6 +440,7 @@ private:
 					info->position = position;
 					info->state = TrackerState::RUNNING;
 					should_send = true;
+					SupersedeOthersAtPosition(index, position);
 				} else {
 					// increment timeout
 					info->detect_timeout += 1;
@@ -421,6 +451,7 @@ private:
 				if (position != SlimeVRPosition::None && position != info->position) {
 					info->position = position;
 					should_send = true;
+					SupersedeOthersAtPosition(index, position);
 				}
 				break;
 		}
