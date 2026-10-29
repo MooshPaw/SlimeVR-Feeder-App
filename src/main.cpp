@@ -151,6 +151,13 @@ struct TrackerInfo {
 	uint8_t connection_timeout = 0;
 	/// number of ticks since NONE position was first detected
 	uint8_t detect_timeout = 0;
+	/// ticks remaining before this index is allowed to (re-)claim a position,
+	/// after having just been superseded by another index claiming it first.
+	/// Without this, an idle device that OpenVR still enumerates (but isn't
+	/// actively posing) and its replacement (e.g. hand tracking taking over
+	/// for a put-down controller) can repeatedly supersede each other every
+	/// time either one's position "changes" back, instead of settling.
+	uint8_t supersede_cooldown = 0;
 	float last_battery_percent = 0.f;
 };
 
@@ -402,6 +409,11 @@ private:
 				other->state = TrackerState::DISCONNECTED;
 				other->connection_timeout = 0;
 				other->name = "";
+				// give the index we just kicked out a cooldown before it's
+				// allowed to claim anything again, so it can't immediately
+				// turn around and supersede `index` right back - see the
+				// comment on TrackerInfo::supersede_cooldown.
+				other->supersede_cooldown = 100;
 				SetStatus(iii, messages::TrackerStatus_Status_DISCONNECTED, true);
 			}
 		}
@@ -415,6 +427,13 @@ private:
 		auto info = tracker_info + index;
 
 		info->connection_timeout = 0;
+
+		if (info->supersede_cooldown > 0) {
+			--info->supersede_cooldown;
+			// don't let a just-superseded index immediately reclaim (or
+			// claim anything) while its cooldown is active
+			position = SlimeVRPosition::None;
+		}
 
 		bool should_send = false;
 
